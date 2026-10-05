@@ -3,6 +3,17 @@
 Calc ES is a scientific calculator and mathematics workbench with a native
 GTK desktop app and a browser-based calculator.
 
+## Try it online
+
+Use the [Calc ES web calculator](https://tofemiodus.github.io/Calc-ES/).
+It runs in your browser without an account or installation.
+
+## Download
+
+Download the latest source bundle from
+[GitHub Releases](https://github.com/tofemiodus/Calc-ES/releases/latest).
+The bundle includes the native app, browser app, installer, tests, and license.
+
 ## Native Linux desktop app
 
 Requirements on Debian-based Linux distributions:
@@ -30,8 +41,8 @@ and matrix operations.
 
 ## Browser app
 
-Open `toto.html` in a modern browser. The browser app is implemented in
-`toto.html`, `toto.css`, and `toto.js`.
+The browser app is implemented in `index.html`, `toto.css`, and `toto.js`.
+To run it locally, open `index.html` in a modern browser.
 
 ## Tests
 
