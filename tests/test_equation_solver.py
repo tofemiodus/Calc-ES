@@ -5,7 +5,43 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from toto import CalcWindow, solve_equation
+from toto import (
+    CalcWindow,
+    matrix_determinant,
+    matrix_inverse,
+    matrix_operation,
+    solve_equation,
+)
+
+
+class MatrixCalculatorTests(unittest.TestCase):
+    def test_scaled_pivoting_preserves_small_invertible_matrices(self):
+        matrix = [[1e-13, 0.0], [0.0, 1e-13]]
+
+        self.assertEqual(matrix_determinant(matrix), 1e-26)
+        self.assertEqual(matrix_inverse(matrix), [[1e13, 0.0], [0.0, 1e13]])
+
+    def test_scaled_pivoting_still_detects_singular_matrices(self):
+        matrix = [[0.1, 0.2], [0.3, 0.6]]
+
+        self.assertEqual(matrix_determinant(matrix), 0.0)
+        with self.assertRaisesRegex(ValueError, "singular"):
+            matrix_inverse(matrix)
+
+    def test_matrix_operations_keep_expected_results(self):
+        matrix_a = [[1.0, 2.0], [3.0, 4.0]]
+        matrix_b = [[5.0, 6.0], [7.0, 8.0]]
+        cases = (
+            ("Determinant of A", "det(A) = -2"),
+            ("Inverse of A", "[ -2    1 ]\n[ 1.5    -0.5 ]"),
+            ("Transpose of A", "[ 1    3 ]\n[ 2    4 ]"),
+            ("A + B", "[ 6    8 ]\n[ 10    12 ]"),
+            ("A − B", "[ -4    -4 ]\n[ -4    -4 ]"),
+            ("A × B", "[ 19    22 ]\n[ 43    50 ]"),
+        )
+        for operation, expected in cases:
+            with self.subTest(operation=operation):
+                self.assertEqual(matrix_operation(operation, matrix_a, matrix_b), expected)
 
 
 class SimultaneousEquationSolverTests(unittest.TestCase):
