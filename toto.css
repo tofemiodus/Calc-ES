@@ -207,9 +207,11 @@ kbd { padding: 2px 5px; border: 1px solid #394052; border-radius: 4px; backgroun
 }
 .solver-heading select:focus, .workbench-mode select:focus, .equation-input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .equation-inputs { display: grid; gap: 10px; margin-top: 18px; }
-.equation-row { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: center; gap: 10px; }
+.equation-row { display: grid; grid-template-columns: 100px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .equation-row label { color: var(--muted); font-size: 12px; }
 .equation-input { width: 100%; }
+.equation-controls { display: flex; justify-content: flex-end; }
+.remove-equation-button { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-raised); color: var(--text); cursor: pointer; font: inherit; }
 .solver-actions { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
 .solve-button {
   min-height: 42px;
@@ -239,8 +241,17 @@ kbd { padding: 2px 5px; border: 1px solid #394052; border-radius: 4px; backgroun
 .counting-inputs { display: grid; grid-template-columns: auto minmax(90px, 180px) auto minmax(90px, 180px); align-items: center; gap: 10px; margin-top: 18px; }
 .counting-inputs label { color: var(--muted); font-size: 13px; }
 .solver-result { overflow-wrap: anywhere; }
+.solver-result { white-space: pre-line; }
 #graph-canvas { display: block; width: 100%; height: auto; aspect-ratio: 900 / 440; margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-raised); }
 .graph-result { display: block; margin-top: 10px; }
+.matrix-settings { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.matrix-settings label { color: var(--muted); font-size: 12px; }
+.matrix-settings select { min-height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-raised); color: var(--text); font: inherit; }
+.matrix-inputs { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-top: 16px; }
+.matrix-card { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.matrix-card legend { padding: 0 6px; color: var(--text); font-weight: 650; }
+.matrix-grid { display: grid; grid-template-columns: repeat(var(--matrix-size), minmax(64px, 90px)); gap: 6px; }
+.matrix-entry { box-sizing: border-box; min-height: 40px; padding: 0 7px; text-align: right; }
 [hidden] { display: none !important; }
 
 body.light-theme {
@@ -292,6 +303,9 @@ body.light-theme .equation-solver { box-shadow: 0 20px 60px rgba(38, 38, 64, .08
   .key-function { font-size: 11px; }
   .display-hint { font-size: 10px; }
   .equation-solver { padding: 15px; border-radius: 18px; }
+  .equation-row { grid-template-columns: 76px minmax(0, 1fr) auto; gap: 7px; }
+  .matrix-settings { align-items: stretch; }
+  .matrix-settings select { max-width: 100%; }
   .graph-range { width: 72px; }
   .page-footer { padding: 15px 0 22px; }
 }

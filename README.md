@@ -8,6 +8,13 @@ GTK desktop app and a browser-based calculator.
 Use the [Calc ES web calculator](https://tofemiodus.github.io/Calc-ES/).
 It runs in your browser without an account or installation.
 
+## Windows
+
+The [Calc ES Windows repository](https://github.com/tofemiodus/Calc-ES-Windows)
+provides a desktop shortcut installer that opens the offline web app in an
+Edge app window, or in the default browser if Edge is unavailable. Download
+and extract its latest release, then run `install-windows.cmd`.
+
 ## Download
 
 Download the latest source bundle from
@@ -54,7 +61,15 @@ python3 -m unittest discover -s tests -v
 
 GTK interface tests require GTK 3 and an available display.
 
-## License
+## License and project name
 
-Calc ES is distributed under the GNU Affero General Public License v3.0. See
-[`LICENSE`](LICENSE).
+The current source is offered under the [Calc ES Source Available License](LICENSE):
+private non-commercial use and modification are permitted; public redistribution
+of modified copies and commercial use require separate written permission.
+Earlier versions released under AGPL-3.0 remain governed by that license for
+recipients who already received them.
+
+“Calc ES” and the logo are claimed as marks of `tofemiodus`; see
+[`TRADEMARKS.md`](TRADEMARKS.md). A repository notice does not itself register
+a trademark. This custom license is not the standard Business Source License;
+seek legal advice about licensing and trademark registration.

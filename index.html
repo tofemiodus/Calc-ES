@@ -55,6 +55,8 @@
             <button class="key key-function" data-insert="pi" aria-label="Pi">π</button>
             <button class="key key-function" data-insert="e" aria-label="Euler's number">e</button>
             <button class="key key-function" data-insert="%" aria-label="Percent">%</button>
+            <button class="key key-function" data-insert=" npr " aria-label="Permutations">nPr</button>
+            <button class="key key-function" data-insert=" ncr " aria-label="Combinations">nCr</button>
           </div>
 
           <div class="keypad">
@@ -117,6 +119,7 @@
           <option value="graph">Function graph</option>
           <option value="fraction">Fraction and decimal converter</option>
           <option value="counting">Permutations and combinations</option>
+          <option value="matrices">Matrices</option>
         </select>
       </div>
       <div id="equation-tool">
@@ -225,6 +228,45 @@
           <output class="solver-result" id="counting-result" aria-live="polite">Enter whole numbers for n and r.</output>
         </div>
         <p class="solver-hint">Requires 0 ≤ r ≤ n ≤ 1000. Results are exact whole numbers.</p>
+      </div>
+      <div class="polynomial-tool" id="matrix-tool" hidden>
+        <div class="solver-heading">
+          <div>
+            <h2>Matrix calculator</h2>
+            <p>Calculate with square matrices up to 3 × 3.</p>
+          </div>
+        </div>
+        <div class="matrix-settings">
+          <label for="matrix-size">Size</label>
+          <select id="matrix-size" aria-label="Matrix size">
+            <option value="2">2 × 2</option>
+            <option value="3">3 × 3</option>
+          </select>
+          <label for="matrix-operation">Operation</label>
+          <select id="matrix-operation" aria-label="Matrix operation">
+            <option value="determinant">Determinant of A</option>
+            <option value="inverse">Inverse of A</option>
+            <option value="transpose">Transpose of A</option>
+            <option value="add">A + B</option>
+            <option value="subtract">A − B</option>
+            <option value="multiply">A × B</option>
+          </select>
+        </div>
+        <div class="matrix-inputs">
+          <fieldset class="matrix-card">
+            <legend>Matrix A</legend>
+            <div id="matrix-a" class="matrix-grid" aria-label="Matrix A entries"></div>
+          </fieldset>
+          <fieldset class="matrix-card" id="matrix-b-card" hidden>
+            <legend>Matrix B</legend>
+            <div id="matrix-b" class="matrix-grid" aria-label="Matrix B entries"></div>
+          </fieldset>
+        </div>
+        <div class="solver-actions">
+          <button class="solve-button" id="calculate-matrix" type="button">Calculate matrix</button>
+          <output class="solver-result" id="matrix-result" aria-live="polite">Result appears here.</output>
+        </div>
+        <p class="solver-hint">Matrix entries accept calculator expressions, including trigonometric functions in the current DEG/RAD mode.</p>
       </div>
     </section>
     <footer class="page-footer">A little more room to think.</footer>

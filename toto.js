@@ -18,13 +18,20 @@
   const graphTool = document.querySelector("#graph-tool");
   const fractionTool = document.querySelector("#fraction-tool");
   const countingTool = document.querySelector("#counting-tool");
+  const matrixTool = document.querySelector("#matrix-tool");
   const graphCanvas = document.querySelector("#graph-canvas");
   const polynomialResult = document.querySelector("#polynomial-result");
   const factorResult = document.querySelector("#factor-result");
   const graphResult = document.querySelector("#graph-result");
   const fractionResult = document.querySelector("#fraction-result");
   const countingResult = document.querySelector("#counting-result");
+  const matrixResult = document.querySelector("#matrix-result");
+  const matrixSize = document.querySelector("#matrix-size");
+  const matrixOperation = document.querySelector("#matrix-operation");
+  const matrixBCard = document.querySelector("#matrix-b-card");
   const history = [];
+  let simultaneousEquations = ["2a + b = 5", "a - b = 1"];
+  let lastEquationType = "linear";
   let expression = "";
   let answer = 0;
   let memory = null;
@@ -62,7 +69,7 @@
         remaining = remaining.slice(identifier[0].length);
         continue;
       }
-      if ("+-*/^()%!".includes(remaining[0])) {
+      if ("+-*/^()%!=".includes(remaining[0])) {
         tokens.push({ type: "symbol", value: remaining[0] });
         remaining = remaining.slice(1);
         continue;
@@ -105,7 +112,22 @@
     function parseTerm() {
       let value = parseUnary();
       while (true) {
-        if (accept("*")) {
+        if (peek()?.type === "identifier" && ["npr", "ncr"].includes(peek().value)) {
+          const operation = take().value;
+          const right = parseUnary();
+          if (!Number.isInteger(value) || !Number.isInteger(right) ||
+              value < 0 || right < 0 || right > value || value > 170) {
+            throw new Error("nPr and nCr require whole numbers satisfying 0 ≤ r ≤ n ≤ 170");
+          }
+          let answer = 1;
+          if (operation === "npr") {
+            for (let index = 0; index < right; index++) answer *= value - index;
+          } else {
+            const count = Math.min(right, value - right);
+            for (let index = 1; index <= count; index++) answer = answer * (value - index + 1) / index;
+          }
+          value = answer;
+        } else if (accept("*")) {
           value *= parseUnary();
         } else if (accept("/")) {
           const divisor = parseUnary();
@@ -340,9 +362,13 @@
     return polynomial;
   }
 
-  function variablesIn(source) {
+  function variablesIn(source, allowMultiLetter = false) {
     return tokenize(source)
-      .filter((token) => token.type === "identifier" && token.value.length === 1)
+      .filter((token) => token.type === "identifier" &&
+        (allowMultiLetter
+          ? !["pi", "e", "npr", "ncr", "sin", "cos", "tan", "asin", "acos", "atan",
+            "sqrt", "log", "ln", "abs"].includes(token.value)
+          : token.value.length === 1))
       .map((token) => token.value)
       .filter((name, index, names) => names.indexOf(name) === index);
   }
@@ -396,23 +422,204 @@
     return `${variable} = ${formatNumber(first)} or ${variable} = ${formatNumber(second)}`;
   }
 
-  function solveSimultaneous(first, second, variables = ["x", "y"]) {
-    const equations = [first, second];
-    for (const polynomial of equations) {
-      if ([...polynomial.keys()].some((key) => key === "1,1" || key === "0,2" || key === "2,0")) {
+  function parseLinearExpression(source, variables) {
+    const tokens = tokenize(source);
+    let position = 0;
+    const peek = () => tokens[position];
+    const accept = (symbol) => {
+      if (peek()?.value === symbol) {
+        position++;
+        return true;
+      }
+      return false;
+    };
+    const constant = (value) => ({ coefficients: new Map(), constant: value });
+    const scale = (value, factor) => {
+      const coefficients = new Map([...value.coefficients]
+        .map(([name, coefficient]) => [name, coefficient * factor])
+        .filter(([, coefficient]) => coefficient !== 0));
+      const result = { coefficients, constant: value.constant * factor };
+      if (!Number.isFinite(result.constant) ||
+          [...coefficients.values()].some((coefficient) => !Number.isFinite(coefficient))) {
+        throw new Error("Equation values are outside the supported range");
+      }
+      return result;
+    };
+    const add = (left, right, sign = 1) => {
+      const coefficients = new Map(left.coefficients);
+      for (const [name, coefficient] of right.coefficients) {
+        const sum = (coefficients.get(name) ?? 0) + sign * coefficient;
+        if (sum === 0) coefficients.delete(name);
+        else coefficients.set(name, sum);
+      }
+      const result = { coefficients, constant: left.constant + sign * right.constant };
+      if (!Number.isFinite(result.constant) ||
+          [...coefficients.values()].some((coefficient) => !Number.isFinite(coefficient))) {
+        throw new Error("Equation values are outside the supported range");
+      }
+      return result;
+    };
+    const startsTerm = () => peek()?.type === "number" ||
+      peek()?.type === "identifier" || peek()?.value === "(";
+
+    function parseExpression() {
+      let value = parseTerm();
+      while (peek()?.value === "+" || peek()?.value === "-") {
+        const sign = tokens[position++].value === "-" ? -1 : 1;
+        value = add(value, parseTerm(), sign);
+      }
+      return value;
+    }
+
+    function parseTerm() {
+      let value = parseUnary();
+      while (true) {
+        if (accept("*") || startsTerm()) {
+          const right = parseUnary();
+          if (value.coefficients.size && right.coefficients.size) {
+            throw new Error("Simultaneous equations must be linear");
+          }
+          value = right.coefficients.size
+            ? scale(right, value.constant)
+            : scale(value, right.constant);
+        } else if (accept("/")) {
+          const divisor = parseUnary();
+          if (divisor.coefficients.size || divisor.constant === 0) {
+            throw new Error("Division is only supported by a non-zero number");
+          }
+          value = scale(value, 1 / divisor.constant);
+        } else {
+          return value;
+        }
+      }
+    }
+
+    function parseUnary() {
+      if (accept("+")) return parseUnary();
+      if (accept("-")) return scale(parseUnary(), -1);
+      return parsePower();
+    }
+
+    function parsePower() {
+      const value = parsePostfix();
+      if (!accept("^")) return value;
+      const exponent = parseUnary();
+      if (exponent.coefficients.size || !Number.isInteger(exponent.constant)) {
+        throw new Error("Use a whole-number power in a linear equation");
+      }
+      if (value.coefficients.size) {
+        if (exponent.constant === 0) return constant(1);
+        if (exponent.constant === 1) return value;
         throw new Error("Simultaneous equations must be linear");
       }
+      const result = value.constant ** exponent.constant;
+      if (!Number.isFinite(result)) throw new Error("This power is outside the supported range");
+      return constant(result);
     }
-    const [a, b, c] = [first.get("1,0") ?? 0, first.get("0,1") ?? 0, -(first.get("0,0") ?? 0)];
-    const [d, e, f] = [second.get("1,0") ?? 0, second.get("0,1") ?? 0, -(second.get("0,0") ?? 0)];
-    const determinant = a * e - b * d;
-    if (Math.abs(determinant) < 1e-12) {
-      if (Math.abs(a * f - c * d) < 1e-12 && Math.abs(b * f - c * e) < 1e-12) {
-        return "These equations have infinitely many solutions.";
+
+    function parsePostfix() {
+      let value = parsePrimary();
+      while (true) {
+        if (accept("%")) value = scale(value, 0.01);
+        else if (accept("!")) {
+          if (value.coefficients.size || !Number.isInteger(value.constant) ||
+              value.constant < 0 || value.constant > 170) {
+            throw new Error("Factorial requires a whole-number constant from 0 to 170");
+          }
+          let result = 1;
+          for (let factor = 2; factor <= value.constant; factor++) result *= factor;
+          value = constant(result);
+        } else return value;
       }
-      return "These equations have no solution.";
     }
-    return `${variables[0]} = ${formatNumber((c * e - b * f) / determinant)}, ${variables[1]} = ${formatNumber((a * f - c * d) / determinant)}`;
+
+    function parsePrimary() {
+      const token = tokens[position++];
+      if (!token) throw new Error("Complete each equation before solving");
+      if (token.type === "number") return constant(token.value);
+      if (token.value === "(") {
+        const value = parseExpression();
+        if (!accept(")")) throw new Error("Missing closing parenthesis");
+        return value;
+      }
+      if (token.type !== "identifier") throw new Error("Check the equation format");
+      if (token.value === "pi") return constant(Math.PI);
+      if (token.value === "e") return constant(Math.E);
+      if (!variables.includes(token.value)) {
+        throw new Error(`Unknown variable or function: ${token.value}`);
+      }
+      return { coefficients: new Map([[token.value, 1]]), constant: 0 };
+    }
+
+    if (!tokens.length) throw new Error("Enter an expression");
+    const result = parseExpression();
+    if (position !== tokens.length) throw new Error("Check the equation format");
+    return result;
+  }
+
+  function solveSimultaneous(sources, variables) {
+    const rows = sources.map((source) => {
+      const sides = source.split("=");
+      if (sides.length !== 2 || !sides[0].trim() || !sides[1].trim()) {
+        throw new Error("Write each equation with exactly one equals sign");
+      }
+      const left = parseLinearExpression(sides[0], variables);
+      const right = parseLinearExpression(sides[1], variables);
+      const difference = new Map(left.coefficients);
+      for (const [name, coefficient] of right.coefficients) {
+        difference.set(name, (difference.get(name) ?? 0) - coefficient);
+      }
+      const row = variables.map((name) => difference.get(name) ?? 0)
+        .concat(right.constant - left.constant);
+      const scale = Math.max(...row.slice(0, variables.length).map(Math.abs));
+      if (scale === 0) {
+        if (Math.abs(row.at(-1)) > 1e-12) return { inconsistent: true, values: row };
+        return { inconsistent: false, values: row };
+      }
+      return { inconsistent: false, values: row.map((value) => value / scale) };
+    });
+    if (rows.some((row) => row.inconsistent)) return "These equations have no solution.";
+    const coefficients = rows.map((row) => row.values);
+    const columnScales = variables.map((_, column) =>
+      Math.max(...coefficients.map((row) => Math.abs(row[column]))));
+    let pivotRow = 0;
+    const pivotColumns = [];
+    for (let column = 0; column < variables.length && pivotRow < coefficients.length; column++) {
+      let bestRow = pivotRow;
+      for (let candidate = pivotRow + 1; candidate < coefficients.length; candidate++) {
+        if (Math.abs(coefficients[candidate][column]) > Math.abs(coefficients[bestRow][column])) {
+          bestRow = candidate;
+        }
+      }
+      if (Math.abs(coefficients[bestRow][column]) <= columnScales[column] * 1e-12) continue;
+      [coefficients[pivotRow], coefficients[bestRow]] = [coefficients[bestRow], coefficients[pivotRow]];
+      const pivot = coefficients[pivotRow][column];
+      coefficients[pivotRow] = coefficients[pivotRow].map((value) => value / pivot);
+      for (let index = 0; index < coefficients.length; index++) {
+        if (index === pivotRow) continue;
+        const factor = coefficients[index][column];
+        if (Math.abs(factor) < 1e-12) continue;
+        coefficients[index] = coefficients[index].map(
+          (value, entry) => value - factor * coefficients[pivotRow][entry]);
+      }
+      pivotColumns.push(column);
+      pivotRow++;
+    }
+    for (const row of coefficients) {
+      if (row.slice(0, variables.length)
+        .every((value, column) => Math.abs(value) <= columnScales[column] * 1e-12) &&
+        Math.abs(row.at(-1)) >= 1e-12) {
+        return "These equations have no solution.";
+      }
+    }
+    if (pivotColumns.length < variables.length) {
+      return "These equations have infinitely many solutions.";
+    }
+    const solutions = Array(variables.length);
+    pivotColumns.forEach((column, row) => {
+      solutions[column] = `${variables[column]} = ${formatNumber(coefficients[row].at(-1))}`;
+    });
+    return solutions.join(", ");
   }
 
   function polynomialCoefficients(source) {
@@ -689,7 +896,128 @@
     graphTool.hidden = mode !== "graph";
     fractionTool.hidden = mode !== "fraction";
     countingTool.hidden = mode !== "counting";
+    matrixTool.hidden = mode !== "matrices";
     if (mode === "graph") plotGraph();
+  }
+
+  function buildMatrixFields() {
+    const size = Number(matrixSize.value);
+    for (const name of ["a", "b"]) {
+      const container = document.querySelector(`#matrix-${name}`);
+      container.replaceChildren();
+      container.style.setProperty("--matrix-size", size);
+      for (let row = 0; row < size; row++) {
+        for (let column = 0; column < size; column++) {
+          const input = document.createElement("input");
+          input.className = "equation-input matrix-entry";
+          input.type = "text";
+          input.inputMode = "decimal";
+          input.autocomplete = "off";
+          input.spellcheck = false;
+          input.value = row === column ? "1" : "0";
+          input.setAttribute("aria-label", `Matrix ${name.toUpperCase()} row ${row + 1}, column ${column + 1}`);
+          container.append(input);
+        }
+      }
+    }
+    updateMatrixOperation();
+  }
+
+  function updateMatrixOperation() {
+    matrixBCard.hidden = !["add", "subtract", "multiply"].includes(matrixOperation.value);
+  }
+
+  function readMatrix(name) {
+    const size = Number(matrixSize.value);
+    const values = [...document.querySelectorAll(`#matrix-${name} input`)]
+      .map((input) => {
+        const value = evaluate(input.value);
+        if (!Number.isFinite(value)) throw new Error("Matrix entries must be finite numbers");
+        return value;
+      });
+    if (values.length !== size * size) throw new Error("Enter every matrix value");
+    return Array.from({ length: size }, (_, row) => values.slice(row * size, (row + 1) * size));
+  }
+
+  function determinant(matrix) {
+    const values = matrix.map((row) => [...row]);
+    let result = 1;
+    for (let column = 0; column < values.length; column++) {
+      let pivotRow = column;
+      for (let row = column + 1; row < values.length; row++) {
+        if (Math.abs(values[row][column]) > Math.abs(values[pivotRow][column])) pivotRow = row;
+      }
+      if (Math.abs(values[pivotRow][column]) < 1e-12) return 0;
+      if (pivotRow !== column) {
+        [values[column], values[pivotRow]] = [values[pivotRow], values[column]];
+        result *= -1;
+      }
+      const pivot = values[column][column];
+      result *= pivot;
+      for (let row = column + 1; row < values.length; row++) {
+        const scale = values[row][column] / pivot;
+        for (let entry = column + 1; entry < values.length; entry++) {
+          values[row][entry] -= scale * values[column][entry];
+        }
+      }
+    }
+    return result;
+  }
+
+  function inverse(matrix) {
+    const size = matrix.length;
+    const values = matrix.map((row, rowIndex) => [
+      ...row,
+      ...Array.from({ length: size }, (_, column) => rowIndex === column ? 1 : 0),
+    ]);
+    for (let column = 0; column < size; column++) {
+      let pivotRow = column;
+      for (let row = column + 1; row < size; row++) {
+        if (Math.abs(values[row][column]) > Math.abs(values[pivotRow][column])) pivotRow = row;
+      }
+      if (Math.abs(values[pivotRow][column]) < 1e-12) {
+        throw new Error("This matrix is singular and has no inverse.");
+      }
+      [values[column], values[pivotRow]] = [values[pivotRow], values[column]];
+      const pivot = values[column][column];
+      values[column] = values[column].map((value) => value / pivot);
+      for (let row = 0; row < size; row++) {
+        if (row === column) continue;
+        const scale = values[row][column];
+        values[row] = values[row].map((value, index) => value - scale * values[column][index]);
+      }
+    }
+    return values.map((row) => row.slice(size));
+  }
+
+  function calculateMatrix() {
+    try {
+      const a = readMatrix("a");
+      const operation = matrixOperation.value;
+      if (operation === "determinant") {
+        matrixResult.textContent = `det(A) = ${formatNumber(determinant(a))}`;
+      } else {
+        let result;
+        if (operation === "inverse") result = inverse(a);
+        else if (operation === "transpose") result = a[0].map((_, column) => a.map((row) => row[column]));
+        else {
+          const b = readMatrix("b");
+          if (operation === "add" || operation === "subtract") {
+            const sign = operation === "add" ? 1 : -1;
+            result = a.map((row, index) => row.map((value, column) => value + sign * b[index][column]));
+          } else {
+            result = a.map((row, index) => row.map((_, column) =>
+              row.reduce((sum, value, inner) => sum + value * b[inner][column], 0)));
+          }
+        }
+        matrixResult.textContent = result.map((row) =>
+          `[ ${row.map(formatNumber).join("    ")} ]`).join("\n");
+      }
+      matrixResult.classList.remove("error");
+    } catch (error) {
+      matrixResult.textContent = error.message || "Unable to calculate this matrix";
+      matrixResult.classList.add("error");
+    }
   }
 
   function gcd(left, right) {
@@ -717,7 +1045,15 @@
       if (source.length > 300) throw new Error("Enter a value with no more than 300 characters.");
       let numerator;
       let denominator;
-      if (source.includes("/")) {
+      const mixed = source.match(/^([+-]?\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+      if (mixed) {
+        const whole = BigInt(mixed[1]);
+        const part = BigInt(mixed[2]);
+        denominator = BigInt(mixed[3]);
+        if (denominator === 0n) throw new Error("The denominator cannot be zero.");
+        const sign = whole < 0n || mixed[1].startsWith("-") ? -1n : 1n;
+        numerator = sign * (absoluteBigInt(whole) * denominator + part);
+      } else if (source.includes("/")) {
         const parts = source.split("/");
         if (parts.length !== 2 || !/^[+-]?\d+$/.test(parts[0].trim()) || !/^[+-]?\d+$/.test(parts[1].trim())) {
           throw new Error("Enter a fraction as two whole numbers, e.g. 3/8.");
@@ -735,14 +1071,35 @@
       } else {
         [numerator, denominator] = fractionFromDecimal(source);
       }
+      if (denominator < 0n) {
+        numerator = -numerator;
+        denominator = -denominator;
+      }
+      const divisor = gcd(numerator, denominator);
+      numerator /= divisor;
+      denominator /= divisor;
       const decimal = Number(numerator) / Number(denominator);
       if (!Number.isFinite(decimal)) throw new Error("This value is outside the supported numeric range.");
-      fractionResult.textContent = `${numerator}/${denominator} = ${formatNumber(decimal)}`;
+      fractionResult.textContent = `Fraction: ${numerator}/${denominator}\nDecimal: ${formatNumber(decimal)}\nMixed number: ${mixedFractionText(numerator, denominator)}`;
       fractionResult.classList.remove("error");
     } catch (error) {
       fractionResult.textContent = error.message || "Unable to convert this value.";
       fractionResult.classList.add("error");
     }
+  }
+
+  function absoluteBigInt(value) {
+    return value < 0n ? -value : value;
+  }
+
+  function mixedFractionText(numerator, denominator) {
+    const sign = numerator < 0n ? "−" : "";
+    const absolute = absoluteBigInt(numerator);
+    const whole = absolute / denominator;
+    const remainder = absolute % denominator;
+    if (remainder === 0n) return `${sign}${whole}`;
+    if (whole === 0n) return `${sign}${remainder}/${denominator}`;
+    return `${sign}${whole} ${remainder}/${denominator}`;
   }
 
   function factorial(value) {
@@ -772,11 +1129,17 @@
 
   function renderEquationInputs() {
     const type = equationType.value;
-    const rows = type === "simultaneous"
-      ? [["equation-one", "Equation 1", "2a + b = 5"], ["equation-two", "Equation 2", "a - b = 1"]]
-      : [["equation-one", "Equation", type === "quadratic" ? "t^2 - 5t + 6 = 0" : "2t + 3 = 7"]];
+    if (lastEquationType === "simultaneous" && type !== "simultaneous") {
+      simultaneousEquations = [...equationInputs.querySelectorAll("input")].map((input) => input.value);
+    }
+    lastEquationType = type;
     equationInputs.replaceChildren();
-    for (const [id, labelText, placeholder] of rows) {
+    const rows = type === "simultaneous"
+      ? simultaneousEquations
+      : [type === "quadratic" ? "t^2 - 5t + 6 = 0" : "2t + 3 = 7"];
+    for (const [index, placeholder] of rows.entries()) {
+      const id = `equation-${index + 1}`;
+      const labelText = type === "simultaneous" ? `Equation ${index + 1}` : "Equation";
       const row = document.createElement("div");
       row.className = "equation-row";
       const label = document.createElement("label");
@@ -788,13 +1151,42 @@
       input.type = "text";
       input.autocomplete = "off";
       input.spellcheck = false;
-      input.placeholder = placeholder;
+      input.value = placeholder;
       input.setAttribute("aria-label", labelText);
       row.append(label, input);
+      if (type === "simultaneous" && rows.length > 2) {
+        const remove = document.createElement("button");
+        remove.className = "remove-equation-button";
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.setAttribute("aria-label", `Remove ${labelText.toLowerCase()}`);
+        remove.addEventListener("click", () => {
+          simultaneousEquations = [...equationInputs.querySelectorAll("input")].map((entry) => entry.value);
+          simultaneousEquations.splice(index, 1);
+          renderEquationInputs();
+        });
+        row.append(remove);
+      }
       equationInputs.append(row);
     }
+    if (type === "simultaneous") {
+      const controls = document.createElement("div");
+      controls.className = "equation-controls";
+      const add = document.createElement("button");
+      add.className = "solve-button";
+      add.type = "button";
+      add.textContent = "Add equation";
+      add.addEventListener("click", () => {
+        simultaneousEquations = [...equationInputs.querySelectorAll("input")].map((entry) => entry.value);
+        simultaneousEquations.push("");
+        renderEquationInputs();
+        equationInputs.querySelectorAll("input").item(simultaneousEquations.length - 1)?.focus();
+      });
+      controls.append(add);
+      equationInputs.append(controls);
+    }
     solverHint.textContent = type === "simultaneous"
-      ? "Enter two linear equations using any two different letters, for example 2a + b = 5 and a - b = 1."
+      ? "Enter at least two linear equations using the same variables. Add or remove equations as needed."
       : type === "quadratic"
         ? "Use any one letter as the unknown. For example, t^2 - 5t + 6 = 0."
         : "Use any one letter as the unknown. For example, 2t + 3 = 7.";
@@ -804,28 +1196,36 @@
 
   function solveEquations() {
     try {
-      const firstSource = document.querySelector("#equation-one").value;
-      const equationSources = [firstSource];
-      if (equationType.value === "simultaneous") {
-        equationSources.push(document.querySelector("#equation-two").value);
+      const equationSources = [...equationInputs.querySelectorAll("input")]
+        .map((input) => input.value.trim());
+      if (equationSources.some((source) => !source)) {
+        throw new Error("Complete every equation before solving");
       }
-      const variables = equationSources.flatMap(variablesIn)
+      if (equationType.value === "simultaneous" && equationSources.length < 2) {
+        throw new Error("Enter at least two equations, one per line");
+      }
+      const variables = equationSources.flatMap((source) =>
+        variablesIn(source, equationType.value === "simultaneous"))
         .filter((name, index, names) => names.indexOf(name) === index);
       if (equationType.value === "simultaneous") {
-        if (variables.length !== 2) throw new Error("Simultaneous equations must use exactly two different letters.");
+        if (!variables.length) throw new Error("Simultaneous equations must include at least one variable.");
       } else if (variables.length > 1) {
         throw new Error("Use only one variable letter in this equation.");
       }
-      const equationVariables = variables.length ? variables : equationType.value === "simultaneous" ? ["x", "y"] : ["x"];
-      const first = parseEquation(firstSource, equationVariables);
+      const equationVariables = variables.length ? variables : ["x"];
+      if (equationType.value !== "simultaneous" && equationSources.length !== 1) {
+        throw new Error("Enter one equation.");
+      }
       let solution;
       if (equationType.value === "simultaneous") {
-        const second = parseEquation(equationSources[1], equationVariables);
-        solution = solveSimultaneous(first, second, equationVariables);
-      } else if (equationType.value === "quadratic") {
-        solution = solveQuadratic(first, equationVariables[0]);
+        solution = solveSimultaneous(equationSources, equationVariables);
       } else {
-        solution = solveLinear(first, equationVariables[0]);
+        const first = parseEquation(equationSources[0], equationVariables);
+        if (equationType.value === "quadratic") {
+          solution = solveQuadratic(first, equationVariables[0]);
+        } else {
+          solution = solveLinear(first, equationVariables[0]);
+        }
       }
       solverResult.textContent = solution;
       solverResult.classList.remove("error");
@@ -836,7 +1236,7 @@
   }
 
   function insert(value) {
-    const isContinuation = ["+", "−", "×", "÷", "^", "%", "!", ")"].includes(value);
+    const isContinuation = ["+", "−", "×", "÷", "^", "%", "!", ")", " npr ", " ncr "].includes(value);
     if (justCalculated && !isContinuation) expression = "";
     justCalculated = false;
     expression += value;
@@ -987,6 +1387,12 @@
   document.querySelector("#plot-graph").addEventListener("click", plotGraph);
   document.querySelector("#convert-fraction").addEventListener("click", convertFraction);
   document.querySelector("#calculate-counting").addEventListener("click", calculateCounting);
+  matrixSize.addEventListener("change", buildMatrixFields);
+  matrixOperation.addEventListener("change", updateMatrixOperation);
+  document.querySelector("#calculate-matrix").addEventListener("click", calculateMatrix);
+  document.querySelector("#matrix-tool").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.matches("input")) calculateMatrix();
+  });
   for (const id of ["polynomial-expression", "factor-expression"]) {
     document.querySelector(`#${id}`).addEventListener("keydown", (event) => {
       if (event.key === "Enter") id === "polynomial-expression" ? solvePolynomial() : factorPolynomial();
@@ -1043,6 +1449,7 @@
   });
 
   renderEquationInputs();
+  buildMatrixFields();
   renderWorkbenchMode();
   render();
 })();
